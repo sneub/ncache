@@ -86,6 +86,9 @@ func (c *Cache) freespace () (free int) {
 }
 
 func (c *Cache) removeElement (keyname *list.Element) {
+    c.lock.Lock()
+    defer c.lock.Unlock()
+
     c.index.Remove(keyname)
     k := keyname.Value.(*key)
     delete(c.data, k.key)
