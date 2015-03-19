@@ -1,7 +1,6 @@
 package ncache
 
 import (
-    "fmt"
     "os"
     "bytes"
     "sync"
@@ -28,51 +27,43 @@ type key struct {
     popularity int
 }
 
-func New (size int) (*Cache, error) {
+func New (size int, poll time.Duration, ttl int) (*Cache, error) {
     if size <= 0 {
         return nil, errors.New("Invalid cache size")
     }
     mapsize := (size * 1024 * 1024) / os.Getpagesize()
-
-    fmt.Printf("Initialising cache with size %d MB / %d pages (system page size %d)\n", size, mapsize, os.Getpagesize())
 
     c := &Cache{
         size:    (size*1024*1024),
         tracker: 0,
         index:   list.New(),
         data:    make(map[interface{}]*list.Element, mapsize),
-        poll:    30,
-        ttl:     120,
+        poll:    poll,
+        ttl:     ttl,
     }
     go c.evictor(0)
     return c, nil
 }
 
-func (c *Cache) Set (keyname string, value *bytes.Buffer) (found bool) {
-    c.lock.Lock()
-    defer c.lock.Unlock()
-
-    fmt.Printf("ncache SET: %s (%d bytes)\n", keyname, value.Len())
+func (c *Cache) Set (keyname string, value *bytes.Buffer) (success bool) {
     keysize := value.Len()
-
     if (c.tracker + keysize) >= c.size {
-        fmt.Println("Cache limit reached. Running evictor")
         c.evictor(keysize)
     }
 
-    c.tracker += keysize
-    fmt.Printf("Tracker at %d / %d bytes\n", c.tracker, c.size)
+    c.lock.Lock()
+    defer c.lock.Unlock()
 
+    c.tracker += keysize
     k := &key{keyname, value, value.Len(), time.Now(), 0}
     c.data[keyname] = c.index.PushFront(k)
+
     return true
 }
 
 func (c *Cache) Get (keyname string) (value interface{}, found bool) {
-    c.lock.Lock()
-    defer c.lock.Unlock()
-
-    fmt.Printf("ncache GET: %s\n", keyname)
+    c.lock.RLock()
+    defer c.lock.RUnlock()
 
     k, found := c.data[keyname]
     if found {
@@ -107,8 +98,7 @@ func (c *Cache) evictor (size int) {
         for {
             for i := c.index.Front(); i != nil; i = i.Next() {
                 keyage := time.Now().Sub(i.Value.(*key).birthday).Seconds()
-                if (int(keyage) >= c.ttl) {
-                    fmt.Printf("Key TTL expired %s\n", i.Value.(*key).key)
+                if int(keyage) >= c.ttl {
                     c.removeElement(i)
                 }
             }
