@@ -1,9 +1,11 @@
 package ncache
 
 import (
+    "fmt"
     "testing"
     "time"
     "bytes"
+    "github.com/dustin/randbo"
 )
 
 func TestSetGet(t *testing.T) {
@@ -14,7 +16,8 @@ func TestSetGet(t *testing.T) {
     }
 
     var data []byte
-    data = make([]byte, 512, 512)
+    data = make([]byte, 512)
+    randbo.New().Read(data)
 
     buf := bytes.NewBuffer(data)
     success := cache.Set("foo", buf)
@@ -30,7 +33,11 @@ func TestSetGet(t *testing.T) {
     }
 
     if expected == nil {
-        t.Fatalf("get data came back incorrect")
+        t.Fatalf("get data came back empty")
+    }
+
+    if fmt.Sprintf("%s", data) != fmt.Sprintf("%s", expected) {
+        t.Fatalf("returned data doesn't match original key")
     }
 }
 
